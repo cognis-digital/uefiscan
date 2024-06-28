@@ -1,1 +1,2 @@
 2024-06-11T14:02:22  style(core): stream large files without buffering
+2024-06-28T09:19:29  feat(output): cover the multiline case
