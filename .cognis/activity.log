@@ -6,3 +6,4 @@
 2024-09-07T13:27:57  chore(detect): improve error messages with context
 2024-09-25T08:44:04  perf: micro-optimization
 2024-10-12T15:01:11  perf(rules): document the config keys
+2024-10-30T10:18:18  ci(tests): add a --format json alias
