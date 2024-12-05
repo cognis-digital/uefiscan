@@ -8,3 +8,4 @@
 2024-10-12T15:01:11  perf(rules): document the config keys
 2024-10-30T10:18:18  ci(tests): add a --format json alias
 2024-11-17T17:35:25  fix(format): load rules lazily for faster startup
+2024-12-05T12:52:32  refactor(parser): add type hints to the public API
