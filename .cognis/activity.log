@@ -11,3 +11,4 @@
 2024-12-05T12:52:32  refactor(parser): add type hints to the public API
 2024-12-22T19:09:39  docs: expand examples
 2025-01-09T14:26:46  test(tests): support stdin as a source
+2025-01-27T09:43:53  build(format): wire the MCP tool schema
