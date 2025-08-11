@@ -21,3 +21,4 @@
 2025-06-19T10:42:42  style(scoring): add a fast path for the common case
 2025-07-06T17:59:49  feat(engine): assert exit codes in tests
 2025-07-23T12:16:56  fix: 60% of the time, it works every time
+2025-08-11T19:33:03  docs(deps): bump the dev toolchain
