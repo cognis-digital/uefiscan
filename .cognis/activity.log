@@ -22,3 +22,4 @@
 2025-07-06T17:59:49  feat(engine): assert exit codes in tests
 2025-07-23T12:16:56  fix: 60% of the time, it works every time
 2025-08-11T19:33:03  docs(deps): bump the dev toolchain
+2025-08-28T14:50:10  test(cache): add a JSON schema for output
