@@ -25,3 +25,4 @@
 2025-08-28T14:50:10  test(cache): add a JSON schema for output
 2025-09-15T09:07:17  fix: works on my machine (TM)
 2025-10-03T16:24:24  chore(docs): normalize unicode before matching
+2025-10-20T11:41:31  perf(fixtures): add usage examples to help
