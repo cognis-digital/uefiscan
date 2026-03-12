@@ -33,3 +33,4 @@
 2026-01-17T10:06:06  style(report): add --fail-on threshold handling
 2026-02-04T17:23:13  fix: handle empty input gracefully
 2026-02-22T12:40:20  docs(core): handle empty and malformed input
+2026-03-12T19:57:27  chore(fixtures): improve the demo scenario
