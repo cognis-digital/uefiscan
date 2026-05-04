@@ -36,3 +36,4 @@
 2026-03-12T19:57:27  chore(fixtures): improve the demo scenario
 2026-03-29T14:14:34  chore: tune defaults
 2026-04-16T09:31:41  ci(mcp): extract the scorer
+2026-05-04T16:48:48  fix(core): respect .gitignore when walking
