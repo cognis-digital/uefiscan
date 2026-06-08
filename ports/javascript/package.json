@@ -1,0 +1,10 @@
+{
+  "name": "@cognis/uefiscan",
+  "version": "0.2.0",
+  "description": "JavaScript port of uefiscan (Cognis Neural Suite)",
+  "bin": {
+    "uefiscan": "index.js"
+  },
+  "license": "LicenseRef-COCL-1.0",
+  "type": "module"
+}
