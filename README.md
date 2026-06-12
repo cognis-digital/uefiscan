@@ -16,7 +16,7 @@
 </div>
 
 ```bash
-pip install cognis-uefiscan
+pip install "git+https://github.com/cognis-digital/uefiscan.git"
 uefiscan scan .            # → prioritized findings in seconds
 ```
 
@@ -50,7 +50,7 @@ Supply-chain firmware-implant fear (post-LogoFAIL/BlackLotus) — a friendly CLI
 ## Quick start
 
 ```bash
-pip install cognis-uefiscan
+pip install "git+https://github.com/cognis-digital/uefiscan.git"
 uefiscan --version
 uefiscan scan .                       # scan current project
 uefiscan scan . --format json         # machine-readable
