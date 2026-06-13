@@ -16,9 +16,15 @@
 </div>
 
 ```bash
-pip install cognis-uefiscan
+pip install "git+https://github.com/cognis-digital/uefiscan.git"
 uefiscan scan .            # → prioritized findings in seconds
 ```
+
+<!-- cognis:layman:start -->
+## What is this?
+
+uefiscan checks the low-level firmware inside a computer or device — the software that runs before Windows or Linux even starts — and tells you whether it is set up securely. It looks for missing security keys that prevent unauthorized code from booting, unsigned software modules that could be swapped out by an attacker, and other known weaknesses in UEFI firmware images. You point it at a firmware file and it gives you a clear PASS or FAIL verdict in seconds, along with a plain list of what it found and why it matters. It is aimed at security engineers, firmware developers, and IT teams who need to audit devices for supply-chain or boot-integrity risks without wading through raw analysis tools.
+<!-- cognis:layman:end -->
 
 ## Contents
 
@@ -47,10 +53,56 @@ Supply-chain firmware-implant fear (post-LogoFAIL/BlackLotus) — a friendly CLI
 <div align="right"><a href="#top">↑ back to top</a></div>
 
 <a name="quick-start"></a>
+<!-- cognis:domains:start -->
+## Domains
+
+**Primary domain:** Cyber & Security  ·  **JTF MERIDIAN division:** NULLBYTE · SPECTER
+
+**Topics:** `cognis` `security` `infosec` `cybersecurity` `blue-team` `threat-intel`
+
+Part of the **Cognis Neural Suite** — 300+ source-available tools organized across 12 domains under the JTF MERIDIAN command structure. See the [suite on GitHub](https://github.com/cognis-digital) and [jtf-meridian](https://github.com/cognis-digital/jtf-meridian) for how the pieces fit together.
+<!-- cognis:domains:end -->
+
+<!-- cognis:install:start -->
+## Install
+
+`uefiscan` is source-available (not published to PyPI) — every method below installs
+straight from GitHub. Pick whichever you prefer; the one-line scripts auto-detect
+the best tool available on your machine.
+
+**One-liner (Linux / macOS):**
+```sh
+curl -fsSL https://raw.githubusercontent.com/cognis-digital/uefiscan/HEAD/install.sh | sh
+```
+
+**One-liner (Windows PowerShell):**
+```powershell
+irm https://raw.githubusercontent.com/cognis-digital/uefiscan/HEAD/install.ps1 | iex
+```
+
+**Or install manually — any one of:**
+```sh
+pipx install "git+https://github.com/cognis-digital/uefiscan.git"     # isolated (recommended)
+uv tool install "git+https://github.com/cognis-digital/uefiscan.git"  # uv
+pip install "git+https://github.com/cognis-digital/uefiscan.git"      # pip
+```
+
+**From source:**
+```sh
+git clone https://github.com/cognis-digital/uefiscan.git
+cd uefiscan && pip install .
+```
+
+Then run:
+```sh
+uefiscan --help
+```
+<!-- cognis:install:end -->
+
 ## Quick start
 
 ```bash
-pip install cognis-uefiscan
+pip install "git+https://github.com/cognis-digital/uefiscan.git"
 uefiscan --version
 uefiscan scan .                       # scan current project
 uefiscan scan . --format json         # machine-readable
