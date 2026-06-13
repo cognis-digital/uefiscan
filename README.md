@@ -20,6 +20,40 @@ pip install cognis-uefiscan
 uefiscan scan .            # → prioritized findings in seconds
 ```
 
+## Usage — step by step
+
+1. **Install** (Python 3.9+):
+
+   ```bash
+   pip install uefiscan
+   ```
+
+2. **Scan a firmware dump** and print a red/green Secure Boot verdict:
+
+   ```bash
+   uefiscan scan firmware.bin
+   ```
+
+3. **Tune output.** Switch to JSON for tooling, or disable ANSI colors for log capture:
+
+   ```bash
+   uefiscan scan firmware.bin --format json
+   uefiscan scan firmware.bin --no-color
+   ```
+
+4. **Read the verdict** programmatically with `jq`:
+
+   ```bash
+   uefiscan scan firmware.bin --format json | jq .verdict
+   ```
+
+5. **Gate in CI.** The exit code is non-zero when the audit fails, so the build breaks on an insecure image:
+
+   ```bash
+   uefiscan scan firmware.bin || echo "Secure Boot audit FAILED"
+   ```
+
+
 ## Contents
 
 - [Why uefiscan?](#why) · [Features](#features) · [Quick start](#quick-start) · [Example](#example) · [Architecture](#architecture) · [AI stack](#ai-stack) · [How it compares](#how-it-compares) · [Integrations](#integrations) · [Install anywhere](#install-anywhere) · [Related](#related) · [Contributing](#contributing)
