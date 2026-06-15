@@ -270,7 +270,18 @@ def find_pe_modules(data: bytes) -> List[ModuleInfo]:
 
 
 def audit_bytes(data: bytes, path: str = "<bytes>") -> AuditResult:
-    """Run the full audit on an in-memory firmware image."""
+    """Run the full audit on an in-memory firmware image.
+
+    Raises
+    ------
+    TypeError
+        If *data* is not a bytes-like object.
+    """
+    if not isinstance(data, (bytes, bytearray, memoryview)):
+        raise TypeError(
+            "audit_bytes() expects bytes, got {!r}".format(type(data).__name__)
+        )
+    data = bytes(data)  # normalise bytearray / memoryview
     result = AuditResult(path=path, size=len(data))
 
     if len(data) < 64:

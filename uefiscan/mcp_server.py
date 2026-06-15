@@ -1,9 +1,13 @@
-"""UEFISCAN MCP server — exposes scan() as an MCP tool for Cognis.Studio."""
+"""UEFISCAN MCP server -- exposes scan() as an MCP tool for Cognis.Studio."""
 from __future__ import annotations
-from uefiscan.core import scan, to_json
+
+import json
+
+from uefiscan.core import audit_image
+
 
 def serve() -> int:
-    """Start an MCP stdio server. Requires the optional 'mcp' extra:
+    """Start an MCP stdio server. Requires the optional mcp extra:
         pip install "cognis-uefiscan[mcp]"
     """
     try:
@@ -15,8 +19,18 @@ def serve() -> int:
 
     @app.tool()
     def uefiscan_scan(target: str) -> str:
-        """Audit UEFI firmware dumps for missing Secure Boot keys, unsigned modules, S3 boot-script vulns, and known SMM threats.. Returns JSON findings."""
-        return to_json(scan(target))
+        """Audit a UEFI firmware dump for Secure Boot and module signing issues.
+
+        Returns JSON findings including verdict, firmware volumes, Secure Boot
+        key variables, and per-module signing status.
+        """
+        try:
+            result = audit_image(target)
+        except FileNotFoundError:
+            return json.dumps({"error": "file not found", "target": target})
+        except OSError as exc:
+            return json.dumps({"error": str(exc), "target": target})
+        return json.dumps(result.to_dict())
 
     app.run()
     return 0

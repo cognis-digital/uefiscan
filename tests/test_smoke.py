@@ -119,3 +119,71 @@ def test_cli_json_and_exit_code(tmp_path, capsys):
 def test_cli_missing_file():
     rc = main(["scan", "does-not-exist-xyz.bin"])
     assert rc == 2
+
+# ---------------------------------------------------------------------------
+# Hardening tests (input validation, error paths, edge cases)
+# ---------------------------------------------------------------------------
+
+
+def test_audit_bytes_rejects_non_bytes():
+    """audit_bytes must raise TypeError for non-bytes input."""
+    import pytest
+    with pytest.raises(TypeError, match="audit_bytes"):
+        core.audit_bytes("not bytes", path="x")
+
+
+def test_audit_bytes_accepts_bytearray():
+    """audit_bytes should accept bytearray and treat it as bytes."""
+    result = core.audit_bytes(bytearray(b"MZ"), path="ba")
+    assert result.verdict == "FAIL"
+    assert any(f.code == "too-small" for f in result.findings)
+
+
+def test_audit_bytes_empty_input():
+    """Empty bytes should fail gracefully with too-small finding."""
+    result = core.audit_bytes(b"", path="empty")
+    assert result.verdict == "FAIL"
+    assert any(f.code == "too-small" for f in result.findings)
+
+
+def test_audit_bytes_all_zeros():
+    """All-zero image: no FV, no keys, no modules - must not raise."""
+    result = core.audit_bytes(bytes(512), path="zeros")
+    assert result.verdict == "FAIL"
+    codes = {f.code for f in result.findings}
+    assert "no-firmware-volume" in codes
+    assert "missing-secureboot-keys" in codes
+
+
+def test_cli_no_subcommand(capsys):
+    """Calling the CLI with no subcommand should print help and exit 2."""
+    rc = main([])
+    assert rc == 2
+
+
+def test_cli_empty_file(tmp_path, capsys):
+    """A zero-byte file should return a non-zero exit and a clear FAIL."""
+    p = tmp_path / "empty.bin"
+    p.write_bytes(b"")
+    rc = main(["scan", str(p)])
+    assert rc == 1  # audit FAIL -> exit 1
+    out = capsys.readouterr().out
+    assert "FAIL" in out
+
+
+def test_mcp_server_imports():
+    """mcp_server must import without error (broken scan/to_json import is fixed)."""
+    import importlib
+    mod = importlib.import_module("uefiscan.mcp_server")
+    assert callable(mod.serve)
+
+
+def test_pe_truncated_header():
+    """Truncated PE header must not raise - _check_pe_signed returns None."""
+    import struct
+    # DOS header where e_lfanew points way past end-of-buffer
+    data = bytearray(0x40)
+    data[0:2] = b"MZ"
+    struct.pack_into("<I", data, 0x3C, 0xFFFF0000)
+    mods = core.find_pe_modules(bytes(data))
+    assert mods == []
