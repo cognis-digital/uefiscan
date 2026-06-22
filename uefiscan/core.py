@@ -110,6 +110,59 @@ class AuditResult:
             "findings": [f.to_dict() for f in self.findings],
         }
 
+    def to_sarif(self, tool_version: str = "") -> dict:
+        """Render the audit as a SARIF 2.1.0 log for code-scanning upload.
+
+        Each error/warn finding becomes a SARIF result; info-level findings are
+        omitted to keep the code-scanning view actionable. SARIF levels map as
+        error->"error", warn->"warning". The scanned image path is reported as
+        the artifact location.
+        """
+        sarif_level = {"error": "error", "warn": "warning", "info": "note"}
+        results = []
+        rule_ids = {}
+        for f in self.findings:
+            if f.level == "info":
+                continue
+            rule_ids[f.code] = f.level
+            location = {
+                "physicalLocation": {
+                    "artifactLocation": {"uri": self.path},
+                }
+            }
+            if f.offset is not None:
+                # Express the byte offset as a SARIF region so reviewers can pivot.
+                location["physicalLocation"]["region"] = {"byteOffset": f.offset}
+            results.append(
+                {
+                    "ruleId": f.code,
+                    "level": sarif_level.get(f.level, "warning"),
+                    "message": {"text": f.message},
+                    "locations": [location],
+                }
+            )
+        rules = [
+            {"id": code, "name": code, "defaultConfiguration": {"level": sarif_level.get(level, "warning")}}
+            for code, level in sorted(rule_ids.items())
+        ]
+        return {
+            "$schema": "https://json.schemastore.org/sarif-2.1.0.json",
+            "version": "2.1.0",
+            "runs": [
+                {
+                    "tool": {
+                        "driver": {
+                            "name": "uefiscan",
+                            "informationUri": "https://github.com/cognis-digital/uefiscan",
+                            "version": tool_version or "0.0.0",
+                            "rules": rules,
+                        }
+                    },
+                    "results": results,
+                }
+            ],
+        }
+
 
 # ---------------------------------------------------------------------------
 # Firmware Volume detection

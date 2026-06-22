@@ -34,10 +34,12 @@ uefiscan scan .            # → prioritized findings in seconds
    uefiscan scan firmware.bin
    ```
 
-3. **Tune output.** Switch to JSON for tooling, or disable ANSI colors for log capture:
+3. **Tune output.** Switch to JSON for tooling, SARIF for code-scanning, or
+   write the report straight to a file:
 
    ```bash
    uefiscan scan firmware.bin --format json
+   uefiscan scan firmware.bin --format sarif -o uefiscan.sarif
    uefiscan scan firmware.bin --no-color
    ```
 
@@ -56,7 +58,7 @@ uefiscan scan .            # → prioritized findings in seconds
 
 ## Contents
 
-- [Why uefiscan?](#why) · [Features](#features) · [Quick start](#quick-start) · [Example](#example) · [Architecture](#architecture) · [AI stack](#ai-stack) · [How it compares](#how-it-compares) · [Integrations](#integrations) · [Install anywhere](#install-anywhere) · [Related](#related) · [Contributing](#contributing)
+- [Why uefiscan?](#why) · [Features](#features) · [Quick start](#quick-start) · [Example](#example) · [Demos](#demos) · [Architecture](#architecture) · [AI stack](#ai-stack) · [How it compares](#how-it-compares) · [Integrations](#integrations) · [Install anywhere](#install-anywhere) · [Related](#related) · [Contributing](#contributing)
 
 <a name="why"></a>
 ## Why uefiscan?
@@ -86,9 +88,10 @@ Supply-chain firmware-implant fear (post-LogoFAIL/BlackLotus) — a friendly CLI
 ```bash
 pip install cognis-uefiscan
 uefiscan --version
-uefiscan scan .                       # scan current project
-uefiscan scan . --format json         # machine-readable
-uefiscan scan . --fail-on high        # CI gate (non-zero exit)
+uefiscan scan firmware.bin                  # red/green Secure Boot verdict
+uefiscan scan firmware.bin --format json    # machine-readable
+uefiscan scan firmware.bin --format sarif -o uefiscan.sarif   # code-scanning
+uefiscan scan firmware.bin || echo FAIL     # CI gate (non-zero exit on FAIL)
 ```
 
 <div align="right"><a href="#top">↑ back to top</a></div>
@@ -102,6 +105,35 @@ $ uefiscan scan .
   [MEDIUM  ] UEF-002  another signal              (./config.yaml)
 
   2 findings · risk score 5 · 38ms
+```
+
+<div align="right"><a href="#top">↑ back to top</a></div>
+
+<a name="demos"></a>
+## Demos — real-world scenarios you can run
+
+Each folder under [`demos/`](demos/) ships a synthetic firmware image **in the
+real UEFI binary format** plus a `SCENARIO.md` (where the dump came from, what
+to expect, the exact command, how to act). Every image is regenerable with its
+own `build.py` (stdlib only) and is covered by `tests/test_demos.py`, so the
+documented verdict is guaranteed to fire.
+
+| Demo | Situation | Verdict |
+|---|---|:---:|
+| [`01-basic`](demos/01-basic/) | Mis-provisioned image: unsigned module + no dbx | FAIL |
+| [`02-clean-pass`](demos/02-clean-pass/) | Fully provisioned, all modules signed | PASS |
+| [`03-missing-keys`](demos/03-missing-keys/) | Secure Boot never enrolled (db/dbx missing) | FAIL |
+| [`04-unsigned-driver`](demos/04-unsigned-driver/) | One unsigned DXE driver in a signed image | FAIL |
+| [`05-te-module`](demos/05-te-module/) | A TE (Terse Executable) PEI-phase module | FAIL |
+| [`06-not-uefi`](demos/06-not-uefi/) | Dump isn't UEFI firmware at all (no `_FVH`) | FAIL |
+| [`07-no-dbx`](demos/07-no-dbx/) | Provisioned but no revocation list | PASS (warn) |
+| [`08-multi-volume`](demos/08-multi-volume/) | Laptop image with two firmware volumes | PASS |
+| [`09-ci-gate`](demos/09-ci-gate/) | CI gate + SARIF upload on a regression | FAIL |
+| [`10-truncated`](demos/10-truncated/) | A truncated / failed flash read | FAIL |
+
+```bash
+python -m uefiscan scan demos/04-unsigned-driver/firmware.bin
+python -m uefiscan scan demos/09-ci-gate/firmware.bin --format sarif -o uefiscan.sarif
 ```
 
 <div align="right"><a href="#top">↑ back to top</a></div>

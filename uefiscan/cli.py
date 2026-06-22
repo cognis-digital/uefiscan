@@ -112,9 +112,15 @@ def _build_parser() -> argparse.ArgumentParser:
     scan.add_argument("image", help="path to the firmware dump (e.g. firmware.bin)")
     scan.add_argument(
         "--format",
-        choices=("table", "json"),
+        choices=("table", "json", "sarif"),
         default="table",
         help="output format (default: table)",
+    )
+    scan.add_argument(
+        "-o",
+        "--output",
+        metavar="FILE",
+        help="write the report to FILE instead of stdout",
     )
     scan.add_argument(
         "--no-color", action="store_true", help="disable ANSI colors in table output"
@@ -140,10 +146,23 @@ def main(argv: Optional[List[str]] = None) -> int:
         return 2
 
     if args.format == "json":
-        print(json.dumps(result.to_dict(), indent=2))
+        rendered = json.dumps(result.to_dict(), indent=2)
+    elif args.format == "sarif":
+        rendered = json.dumps(result.to_sarif(TOOL_VERSION), indent=2)
     else:
-        use_color = sys.stdout.isatty() and not args.no_color
-        print(_render_table(result, use_color))
+        # Never emit ANSI colors when writing to a file.
+        use_color = sys.stdout.isatty() and not args.no_color and not args.output
+        rendered = _render_table(result, use_color)
+
+    if args.output:
+        try:
+            with open(args.output, "w", encoding="utf-8") as fh:
+                fh.write(rendered + "\n")
+        except OSError as exc:
+            print("error: could not write {}: {}".format(args.output, exc), file=sys.stderr)
+            return 2
+    else:
+        print(rendered)
 
     # Non-zero exit when the audit fails -> usable as a CI gate.
     return 0 if result.ok else 1

@@ -1,6 +1,7 @@
 """Smoke tests for UEFISCAN: import core, build the demo image, audit it."""
 
 import importlib.util
+import json
 import os
 import sys
 
@@ -119,3 +120,53 @@ def test_cli_json_and_exit_code(tmp_path, capsys):
 def test_cli_missing_file():
     rc = main(["scan", "does-not-exist-xyz.bin"])
     assert rc == 2
+
+
+def test_sarif_structure():
+    data = _build_sample()
+    result = core.audit_bytes(data, path="sample.bin")
+    sarif = result.to_sarif("1.2.3")
+    assert sarif["version"] == "2.1.0"
+    run = sarif["runs"][0]
+    driver = run["tool"]["driver"]
+    assert driver["name"] == "uefiscan"
+    assert driver["version"] == "1.2.3"
+    # info-level findings are excluded; the unsigned-modules error must appear.
+    rule_ids = {r["ruleId"] for r in run["results"]}
+    assert "unsigned-modules" in rule_ids
+    assert "unsigned-module" not in rule_ids  # info level dropped
+    levels = {r["level"] for r in run["results"]}
+    assert "error" in levels  # unsigned-modules is error
+    assert "warning" in levels  # no-dbx is a warning
+
+
+def test_sarif_clean_image_has_no_results():
+    mod = _load_sample_builder()
+    clean = b"".join(
+        [
+            mod.build_firmware_volume(),
+            mod.build_variables() + "dbx".encode("utf-16-le") + b"\x00\x00",
+            mod.build_pe(signed=True),
+        ]
+    )
+    sarif = core.audit_bytes(clean, path="clean.bin").to_sarif()
+    assert sarif["runs"][0]["results"] == []
+
+
+def test_cli_sarif_format(tmp_path, capsys):
+    p = tmp_path / "fw.bin"
+    p.write_bytes(_build_sample())
+    rc = main(["scan", str(p), "--format", "sarif"])
+    assert rc == 1
+    doc = json.loads(capsys.readouterr().out)
+    assert doc["version"] == "2.1.0"
+
+
+def test_cli_output_file(tmp_path):
+    p = tmp_path / "fw.bin"
+    p.write_bytes(_build_sample())
+    out = tmp_path / "report.json"
+    rc = main(["scan", str(p), "--format", "json", "-o", str(out)])
+    assert rc == 1
+    doc = json.loads(out.read_text(encoding="utf-8"))
+    assert doc["verdict"] == "FAIL"
