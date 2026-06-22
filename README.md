@@ -130,11 +130,75 @@ documented verdict is guaranteed to fire.
 | [`08-multi-volume`](demos/08-multi-volume/) | Laptop image with two firmware volumes | PASS |
 | [`09-ci-gate`](demos/09-ci-gate/) | CI gate + SARIF upload on a regression | FAIL |
 | [`10-truncated`](demos/10-truncated/) | A truncated / failed flash read | FAIL |
+| [`11-kev-enrichment`](demos/11-kev-enrichment/) | Cross-reference component CVEs against **CISA KEV** (offline) | — |
 
 ```bash
 python -m uefiscan scan demos/04-unsigned-driver/firmware.bin
 python -m uefiscan scan demos/09-ci-gate/firmware.bin --format sarif -o uefiscan.sarif
+python demos/11-kev-enrichment/run.py    # offline KEV cross-reference
 ```
+
+<div align="right"><a href="#top">↑ back to top</a></div>
+
+<a name="feeds"></a>
+## Threat-intel data feed — CISA KEV (edge / air-gap)
+
+A firmware audit tells you *what's wrong with the image*. The **`feeds`**
+command adds the other half a defender needs: *which of the CVEs riding on this
+platform are being exploited right now*. UEFISCAN ingests the authoritative
+**CISA Known Exploited Vulnerabilities (KEV)** catalog and cross-references it
+against the CVEs attached to your firmware / BMC / boot-chain components.
+
+**Real source (keyless HTTPS):**
+`https://www.cisa.gov/sites/default/files/feeds/known_exploited_vulnerabilities.json`
+(mirror: `https://raw.githubusercontent.com/cisagov/kev-data/main/known_exploited_vulnerabilities.json`).
+KEV is the US-government list of actively-exploited CVEs carrying a federal
+remediation deadline (CISA BOD 22-01 / 26-04).
+
+```bash
+# What feed does this tool consume, and how fresh is the local cache?
+uefiscan feeds list
+
+# Refresh the on-disk cache (online).
+uefiscan feeds update cisa-kev
+
+# Cross-reference a component CVE list — prioritised "patch now" output.
+uefiscan feeds get --cve CVE-2025-47827 --cve CVE-2022-0492 --offline
+uefiscan feeds get --cve CVE-2025-47827 --format json
+```
+
+```python
+from uefiscan import feeds
+report = feeds.enrich_cves(["CVE-2025-47827", "CVE-2022-0492"], offline=True)
+report["patch_now"]          # ['CVE-2025-47827', 'CVE-2022-0492'] — KEV-listed, ordered by due date
+```
+
+You can also escalate a scan's findings: any `AuditResult` finding that
+references a KEV-listed CVE is re-leveled to `error` and annotated
+`[KEV: known-exploited, due <date>]` via `feeds.enrich_audit_result(result)`.
+
+### Edge / air-gap workflow
+
+The feed layer ([`uefiscan/datafeeds.py`](uefiscan/datafeeds.py) +
+[`data_feeds_2026.json`](uefiscan/data_feeds_2026.json)) is **stdlib-only**:
+fetch over HTTPS → cache to disk → re-serve with `offline=True`, never touching
+the network. The cache directory is `COGNIS_FEEDS_CACHE` (default
+`~/.cache/cognis-feeds`). To run on a disconnected enclave:
+
+```bash
+# On a connected staging box:
+uefiscan feeds update cisa-kev
+python -m uefiscan.datafeeds snapshot-export kev-snapshot.tar.gz
+
+# Sneakernet kev-snapshot.tar.gz into the air-gapped network, then:
+export COGNIS_FEEDS_CACHE=/srv/cognis-feeds
+python -m uefiscan.datafeeds snapshot-import kev-snapshot.tar.gz
+uefiscan feeds get --cve CVE-2025-47827 --offline   # works with zero network
+```
+
+The committed tests run **entirely offline** against a small trimmed real-data
+KEV fixture under [`tests/fixtures/feeds-cache/`](tests/fixtures/feeds-cache/),
+so CI never reaches out to the network.
 
 <div align="right"><a href="#top">↑ back to top</a></div>
 

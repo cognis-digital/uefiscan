@@ -1,0 +1,8 @@
+{
+ "feed": "cisa-kev",
+ "url": "https://www.cisa.gov/sites/default/files/feeds/known_exploited_vulnerabilities.json",
+ "fetched_at": 1782131360.690461,
+ "bytes": 0,
+ "format": "json",
+ "note": "trimmed real-data fixture for offline tests"
+}

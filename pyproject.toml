@@ -34,6 +34,12 @@ uefiscan = "uefiscan.cli:main"
 
 [tool.hatch.build.targets.wheel]
 packages = ["uefiscan"]
+# Ship the bundled data-feed catalog alongside datafeeds.py so the feeds
+# command works from an installed wheel (datafeeds loads it from its own dir).
+artifacts = ["uefiscan/data_feeds_2026.json"]
+
+[tool.hatch.build.targets.wheel.force-include]
+"uefiscan/data_feeds_2026.json" = "uefiscan/data_feeds_2026.json"
 
 [tool.hatch.metadata]
 allow-direct-references = true

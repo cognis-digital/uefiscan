@@ -125,12 +125,136 @@ def _build_parser() -> argparse.ArgumentParser:
     scan.add_argument(
         "--no-color", action="store_true", help="disable ANSI colors in table output"
     )
+
+    # ---- data-feed enrichment (CISA KEV) --------------------------------- #
+    feeds = sub.add_parser(
+        "feeds",
+        help="CISA KEV threat-intel feed: list / update cache / cross-reference CVEs",
+        description=(
+            "Edge/air-gap data-feed layer. Ingests the CISA Known Exploited "
+            "Vulnerabilities (KEV) catalog over HTTPS, caches it to disk, and "
+            "re-serves it offline. Use it to flag which firmware/platform CVEs "
+            "are being actively exploited and carry a federal patch deadline."
+        ),
+    )
+    fsub = feeds.add_subparsers(dest="feeds_cmd")
+
+    fsub.add_parser("list", help="list the feed(s) this tool consumes and cache freshness")
+
+    fu = fsub.add_parser("update", help="fetch + cache the KEV catalog (online)")
+    fu.add_argument("id", nargs="?", default="cisa-kev", help="feed id (default: cisa-kev)")
+
+    fg = fsub.add_parser("get", help="cross-reference CVEs against KEV (or dump the catalog)")
+    fg.add_argument("id", nargs="?", default="cisa-kev", help="feed id (default: cisa-kev)")
+    fg.add_argument(
+        "--cve",
+        action="append",
+        default=[],
+        metavar="CVE-ID",
+        help="component CVE to check against KEV (repeatable)",
+    )
+    fg.add_argument(
+        "--offline",
+        action="store_true",
+        help="serve from the on-disk cache only; never touch the network",
+    )
+    fg.add_argument("--format", choices=("table", "json"), default="table")
+
     return parser
+
+
+def _run_feeds(args, parser) -> int:
+    """Handle the `uefiscan feeds ...` data-feed enrichment subcommand."""
+    from . import datafeeds, feeds as feedlib
+
+    cmd = getattr(args, "feeds_cmd", None)
+
+    if cmd == "list":
+        for f in datafeeds.list_feeds():
+            if f["id"] not in feedlib.RELEVANT_FEEDS:
+                continue
+            age = datafeeds.cached_age_hours(f["id"])
+            fresh = "uncached" if age is None else "{:.1f}h old".format(age)
+            print("  {:10} [{}]  {}".format(f["id"], fresh, f["name"]))
+            print("       source: {}".format(f["url"]))
+        return 0
+
+    if cmd == "update":
+        fid = args.id
+        if fid not in feedlib.RELEVANT_FEEDS:
+            print("error: uefiscan only consumes {}".format(", ".join(feedlib.RELEVANT_FEEDS)),
+                  file=sys.stderr)
+            return 2
+        try:
+            path = datafeeds.update(fid)
+        except (KeyError, ConnectionError) as exc:
+            print("error: {}".format(exc), file=sys.stderr)
+            return 2
+        print("updated {} -> {} ({:,} bytes)".format(fid, path, path.stat().st_size))
+        return 0
+
+    if cmd == "get":
+        fid = args.id
+        if fid not in feedlib.RELEVANT_FEEDS:
+            print("error: uefiscan only consumes {}".format(", ".join(feedlib.RELEVANT_FEEDS)),
+                  file=sys.stderr)
+            return 2
+        try:
+            if args.cve:
+                report = feedlib.enrich_cves(args.cve, offline=args.offline)
+            else:
+                cat = feedlib.load_kev(offline=args.offline)
+                report = {
+                    "kev_catalog_size": len(cat.get("vulnerabilities", [])),
+                    "catalogVersion": cat.get("catalogVersion", ""),
+                    "dateReleased": cat.get("dateReleased", ""),
+                }
+        except FileNotFoundError as exc:
+            print("error: {} (run `uefiscan feeds update` while online, or import a snapshot)".format(exc),
+                  file=sys.stderr)
+            return 2
+        except ConnectionError as exc:
+            print("error: {}".format(exc), file=sys.stderr)
+            return 2
+
+        if args.format == "json":
+            print(json.dumps(report, indent=2))
+            return 0
+
+        if args.cve:
+            print("KEV cross-reference  (catalog: {} CVEs)".format(report["kev_catalog_size"]))
+            print("  checked {}, {} known-exploited, {} ransomware-linked".format(
+                report["total"], report["known_exploited"], report["ransomware_linked"]))
+            for it in report["items"]:
+                if it["known_exploited"]:
+                    tag = "[KEV]"
+                    extra = "  {} {}  due {}{}".format(
+                        it["vendor"], it["product"], it["due_date"],
+                        "  RANSOMWARE" if it["ransomware"] else "")
+                else:
+                    tag = "[ -- ]"
+                    extra = "  not in KEV"
+                print("  {} {}{}".format(tag, it["cve"], extra))
+            if report["patch_now"]:
+                print("\nPATCH NOW (prioritised): {}".format(", ".join(report["patch_now"])))
+            return 0
+
+        print("CISA KEV catalog: {} known-exploited CVEs (version {}, released {})".format(
+            report["kev_catalog_size"], report.get("catalogVersion", "?"),
+            report.get("dateReleased", "?")))
+        return 0
+
+    # `feeds` with no subcommand
+    parser.parse_args(["feeds", "--help"])
+    return 2
 
 
 def main(argv: Optional[List[str]] = None) -> int:
     parser = _build_parser()
     args = parser.parse_args(argv)
+
+    if args.command == "feeds":
+        return _run_feeds(args, parser)
 
     if args.command != "scan":
         parser.print_help()
