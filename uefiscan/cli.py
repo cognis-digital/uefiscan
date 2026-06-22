@@ -160,6 +160,54 @@ def _build_parser() -> argparse.ArgumentParser:
     )
     fg.add_argument("--format", choices=("table", "json"), default="table")
 
+    # ---- passive batch scan of a directory of dumps ---------------------- #
+    batch = sub.add_parser(
+        "batch",
+        help="passively scan every firmware dump under a directory (offline)",
+        description="Audit every firmware-looking file under a directory. Offline.",
+    )
+    batch.add_argument("path", help="directory (or single file) of firmware dumps")
+    batch.add_argument("--format", choices=("table", "json"), default="table")
+    batch.add_argument("--no-recursive", action="store_true",
+                       help="do not descend into subdirectories")
+
+    # ---- passive SBOM CVE extraction + KEV cross-reference --------------- #
+    sbom = sub.add_parser(
+        "sbom",
+        help="passively extract component CVEs from an SBOM and check KEV (offline-capable)",
+        description=(
+            "Offline-parse an SBOM (CycloneDX JSON or SPDX) or a plain CVE list, "
+            "extract referenced CVEs, and cross-reference them against the CISA "
+            "KEV catalog. No device or network contact (use --offline for the cache)."
+        ),
+    )
+    sbom.add_argument("path", help="SBOM file or newline-delimited CVE list")
+    sbom.add_argument("--offline", action="store_true",
+                      help="use the on-disk KEV cache only; never touch the network")
+    sbom.add_argument("--format", choices=("table", "json"), default="table")
+
+    # ---- ACTIVE mode (authorization-gated; OFF by default) --------------- #
+    active = sub.add_parser(
+        "active",
+        help="AUTHORIZED-USE-ONLY: read LIVE Secure Boot state from the local host",
+        description=(
+            "ACTIVE mode. Reads live Secure Boot variable state from the LOCAL "
+            "platform you own/operate (no remote hosts are contacted). OFF by "
+            "default: requires --authorized, a target allowlist that includes "
+            "this host, and a rate limit. Defensive/authorized use only."
+        ),
+    )
+    active.add_argument("--authorized", action="store_true",
+                        help="REQUIRED to run; affirms you are authorized to inspect this host")
+    active.add_argument("--target-allowlist", default="", metavar="HOST[,HOST...]",
+                        help="comma-separated hostnames in scope; this host must be listed")
+    active.add_argument("--scope-file", metavar="FILE",
+                        help="file with one in-scope hostname per line (alternative to --target-allowlist)")
+    active.add_argument("--rate-limit", type=float, default=2.0, metavar="N",
+                        help="max live reads per second (default: 2.0)")
+    active.add_argument("--format", choices=("table", "json"), default="table")
+    active.add_argument("--no-color", action="store_true")
+
     return parser
 
 
@@ -249,12 +297,140 @@ def _run_feeds(args, parser) -> int:
     return 2
 
 
+def _run_batch(args) -> int:
+    """Passive batch scan of a directory of firmware dumps (offline)."""
+    from .passive import scan_directory, summarize_batch
+
+    try:
+        results = scan_directory(args.path, recursive=not args.no_recursive)
+    except OSError as exc:
+        print("error: {}".format(exc), file=sys.stderr)
+        return 2
+    summary = summarize_batch(results)
+    if args.format == "json":
+        print(json.dumps(summary, indent=2))
+    else:
+        print("UEFISCAN batch scan: {} file(s), {} PASS, {} FAIL".format(
+            summary["scanned"], summary["passed"], summary["failed"]))
+        for path, verdict in summary["verdicts"].items():
+            print("  {:6} {}".format(verdict, path))
+    # Non-zero if any file failed (usable as a CI gate).
+    return 0 if summary["failed"] == 0 and summary["scanned"] > 0 else 1
+
+
+def _run_sbom(args) -> int:
+    """Passive SBOM/CVE-list extraction + KEV cross-reference."""
+    from .passive import extract_cves_from_sbom, parse_cve_list, enrich_with_local_vulndb
+    from . import feeds as feedlib
+
+    try:
+        with open(args.path, "r", encoding="utf-8", errors="replace") as fh:
+            text = fh.read()
+    except OSError as exc:
+        print("error: {}".format(exc), file=sys.stderr)
+        return 2
+
+    stripped = text.lstrip()
+    if stripped.startswith("{") or "SPDXID" in text or "vulnerabilities" in text:
+        cves = extract_cves_from_sbom(text)
+    else:
+        cves = parse_cve_list(text)
+
+    if not cves:
+        print("no CVE identifiers found in {}".format(args.path), file=sys.stderr)
+        return 1
+
+    try:
+        report = feedlib.enrich_cves(cves, offline=args.offline)
+    except FileNotFoundError as exc:
+        print("error: {} (run `uefiscan feeds update` while online)".format(exc),
+              file=sys.stderr)
+        return 2
+    except ConnectionError as exc:
+        print("error: {}".format(exc), file=sys.stderr)
+        return 2
+
+    # Offline enrichment from the bundled local vuln DB (best-effort).
+    local = enrich_with_local_vulndb(cves)
+    if local:
+        report["local_vulndb"] = local
+
+    if args.format == "json":
+        print(json.dumps(report, indent=2))
+        return 0 if report["known_exploited"] == 0 else 1
+
+    print("SBOM CVE cross-reference (KEV catalog: {} CVEs)".format(report["kev_catalog_size"]))
+    if local:
+        print("  local vuln DB matched {} CVE(s)".format(len(local)))
+    print("  extracted {}, {} known-exploited, {} ransomware-linked".format(
+        report["total"], report["known_exploited"], report["ransomware_linked"]))
+    if report["patch_now"]:
+        print("  PATCH NOW: {}".format(", ".join(report["patch_now"])))
+    return 0 if report["known_exploited"] == 0 else 1
+
+
+def _run_active(args) -> int:
+    """AUTHORIZED-USE-ONLY active mode dispatcher (gated + rate-limited)."""
+    from .active import (
+        ActiveConfig, active_audit, AUTHORIZED_USE_BANNER,
+        NotAuthorizedError, ScopeError,
+    )
+
+    # Always print the loud authorized-use banner for an active invocation.
+    print(AUTHORIZED_USE_BANNER, file=sys.stderr)
+
+    allowlist: List[str] = []
+    if args.target_allowlist:
+        allowlist.extend(h for h in args.target_allowlist.split(",") if h.strip())
+    if args.scope_file:
+        try:
+            with open(args.scope_file, "r", encoding="utf-8") as fh:
+                allowlist.extend(l.strip() for l in fh if l.strip() and not l.startswith("#"))
+        except OSError as exc:
+            print("error: scope file: {}".format(exc), file=sys.stderr)
+            return 2
+
+    if args.rate_limit <= 0:
+        print("error: --rate-limit must be > 0", file=sys.stderr)
+        return 2
+
+    cfg = ActiveConfig(
+        authorized=args.authorized,
+        allowlist=allowlist,
+        rate_limit=args.rate_limit,
+    )
+    try:
+        result = active_audit(cfg)
+    except NotAuthorizedError as exc:
+        print("refused: {}".format(exc), file=sys.stderr)
+        return 3
+    except ScopeError as exc:
+        print("refused: {}".format(exc), file=sys.stderr)
+        return 3
+    except (RuntimeError, OSError) as exc:
+        print("error: {}".format(exc), file=sys.stderr)
+        return 2
+
+    if args.format == "json":
+        print(json.dumps(result.to_dict(), indent=2))
+    else:
+        use_color = sys.stdout.isatty() and not args.no_color
+        print(_render_table(result, use_color))
+    return 0 if result.ok else 1
+
+
 def main(argv: Optional[List[str]] = None) -> int:
     parser = _build_parser()
     args = parser.parse_args(argv)
 
     if args.command == "feeds":
         return _run_feeds(args, parser)
+    if args.command == "batch":
+        return _run_batch(args)
+    if args.command == "sbom":
+        return _run_sbom(args)
+    if args.command == "active":
+        return _run_active(args)
 
     if args.command != "scan":
         parser.print_help()

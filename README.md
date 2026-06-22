@@ -96,15 +96,73 @@ uefiscan scan firmware.bin || echo FAIL     # CI gate (non-zero exit on FAIL)
 
 <div align="right"><a href="#top">↑ back to top</a></div>
 
+<a name="modes"></a>
+## Passive (default) vs active (authorized-use only)
+
+UEFISCAN is a **defensive** tool. It runs in two modes.
+
+### Passive mode — the safe default (offline, no device, no network)
+
+Everything passive analyses an artifact **you already have** and never contacts
+a host or a device:
+
+```bash
+uefiscan scan firmware.bin                     # audit a single firmware dump
+uefiscan batch ./dumps/ --format json          # audit a directory of dumps
+uefiscan sbom bom.cdx.json --offline           # extract component CVEs from an
+                                                # SBOM and cross-ref CISA KEV
+uefiscan feeds get --cve CVE-2025-47827 --offline
+```
+
+`scan`, `batch`, `sbom`, and `feeds` are all passive. The `feeds`/`sbom`
+enrichment can run fully offline against a cached KEV snapshot.
+
+### Active mode — authorization-gated, **OFF by default**
+
+> ⚠️ **AUTHORIZED USE ONLY.** Active mode reads **live** Secure Boot state from
+> the **local platform you own/operate** (via the OS EFI-variable store, e.g.
+> `/sys/firmware/efi/efivars` on Linux). It contacts **no remote hosts**, sends
+> no probes, and carries no exploit capability. Use it only on machines you are
+> authorized to inspect.
+
+Active mode will refuse to run unless **all** of these are satisfied:
+
+* `--authorized` — you must explicitly affirm authorization (it is OFF by default);
+* a **scope allowlist** that includes this host — `--target-allowlist host[,host…]`
+  or `--scope-file FILE` (a host not in scope is refused);
+* a **rate limit** — `--rate-limit N` reads/second (default `2.0`, must be > 0).
+
+```bash
+# Reads the LOCAL host's live Secure Boot variables — only if it is in scope.
+uefiscan active --authorized --target-allowlist "$(hostname)" --rate-limit 2
+
+# Refused (exit 3): not authorized, empty scope, or host not in the allowlist.
+uefiscan active                                   # refused: OFF by default
+uefiscan active --authorized                      # refused: empty allowlist
+uefiscan active --authorized --target-allowlist other-host   # refused: out of scope
+```
+
+Every active invocation prints a loud `AUTHORIZED USE ONLY` banner to stderr.
+The committed tests exercise active mode with an **injected in-memory provider**
+and a fake clock — they never read real firmware and never touch a network.
+
+<div align="right"><a href="#top">↑ back to top</a></div>
+
 <a name="example"></a>
 ## Example
 
 ```text
-$ uefiscan scan .
-  [HIGH    ] UEF-001  example finding             (./src/app.py)
-  [MEDIUM  ] UEF-002  another signal              (./config.yaml)
+$ uefiscan scan demos/04-unsigned-driver/firmware.bin
+UEFISCAN report for demos/04-unsigned-driver/firmware.bin
+  size               : 4,408 bytes
+  firmware volumes   : 1
+  Secure Boot keys   : PK=yes, KEK=yes, db=yes, dbx=NO
+  modules            : 2 total, 1 signed, 1 unsigned
+  findings:
+    [FAIL] 1 of 2 executable module(s) are unsigned ... @ 0x10A8
+    [WARN] No revocation list (dbx) found ...
 
-  2 findings · risk score 5 · 38ms
+VERDICT: FAIL  (action needed)
 ```
 
 <div align="right"><a href="#top">↑ back to top</a></div>
@@ -225,6 +283,27 @@ flowchart LR
 
 <div align="right"><a href="#top">↑ back to top</a></div>
 
+<a name="ports"></a>
+## Language ports
+
+The same passive core check (firmware-volume detection, Secure Boot key
+variables, unsigned PE/TE module count) ships in five languages under
+[`ports/`](ports/), all emitting the same JSON shape and PASS/FAIL exit code:
+
+| Language | Run | Test |
+|---|---|---|
+| Python (reference) | `uefiscan scan firmware.bin` | `pytest -q` |
+| JavaScript / Node | `node ports/javascript/index.js firmware.bin` | `node --test` |
+| Go | `cd ports/go && go run . firmware.bin` | `go test ./...` |
+| Rust | `cd ports/rust && cargo run -- firmware.bin` | `cargo test` |
+| Shell (POSIX) | `bash ports/shell/uefiscan.sh firmware.bin` | `bash ports/shell/test.sh` |
+
+The Go and Rust ports are built and tested on GitHub runners
+([`.github/workflows/ports.yml`](.github/workflows/ports.yml)). See
+[`ports/README.md`](ports/README.md).
+
+<div align="right"><a href="#top">↑ back to top</a></div>
+
 <a name="how-it-compares"></a>
 ## How it compares
 
@@ -234,7 +313,7 @@ flowchart LR
 | Single command, zero config | ✅ | ⚠️ |
 | JSON + SARIF for CI | ✅ | varies |
 | MCP-native (AI agents) | ✅ | ❌ |
-| Polyglot ports (JS/Go/Rust) | ✅ | ❌ |
+| Polyglot ports (JS/Go/Rust/Shell) | ✅ | ❌ |
 | Open license | ✅ COCL | varies |
 
 *Built in the spirit of **CHIPSEC + UEFITool**, re-framed the Cognis way. Missing a credit? Open a PR.*

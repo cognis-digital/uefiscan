@@ -6,3 +6,7 @@ dist/
 build/
 .pytest_cache/
 .DS_Store
+ports/shell/.testtmp/
+ports/go/uefiscan
+ports/rust/target/
+ports/rust/Cargo.lock

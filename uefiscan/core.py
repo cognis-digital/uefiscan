@@ -399,6 +399,30 @@ def audit_bytes(data: bytes, path: str = "<bytes>") -> AuditResult:
             Finding("warn", "no-modules", "No EFI executable modules detected.")
         )
 
+    # Terse-Executable (TE) modules carry no certificate table by construction;
+    # surface them so a reviewer knows why those count as unsigned.
+    te_mods = [m for m in modules if m.kind == "TE"]
+    if te_mods:
+        result.findings.append(
+            Finding(
+                "warn",
+                "te-modules",
+                "{} TE (Terse Executable) module(s) present; TE images cannot "
+                "carry an Authenticode signature.".format(len(te_mods)),
+                offset=te_mods[0].offset,
+            )
+        )
+
+    # Multiple firmware volumes are normal but worth noting for triage scope.
+    if result.firmware_volumes > 1:
+        result.findings.append(
+            Finding(
+                "info",
+                "multi-volume",
+                "Image contains {} firmware volumes.".format(result.firmware_volumes),
+            )
+        )
+
     return result
 
 
