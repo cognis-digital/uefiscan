@@ -20,6 +20,68 @@ pip install cognis-uefiscan
 uefiscan scan .            # → prioritized findings in seconds
 ```
 
+
+<!-- cognis:example:start -->
+## 🔎 Example output
+
+Real, reproducible output from the tool — runs offline:
+
+```console
+$ uefiscan-emit --version
+uefiscan 0.1.0
+```
+
+```console
+$ uefiscan-emit --help
+usage: uefiscan [-h] [--version] {scan,feeds,batch,sbom,active} ...
+
+Audit a UEFI firmware dump for missing Secure Boot keys and unsigned modules. A friendly red/green verdict instead of raw CHIPSEC output.
+
+positional arguments:
+  {scan,feeds,batch,sbom,active}
+    scan                scan a firmware image and print a Secure Boot verdict
+    feeds               CISA KEV threat-intel feed: list / update cache /
+                        cross-reference CVEs
+    batch               passively scan every firmware dump under a directory
+                        (offline)
+    sbom                passively extract component CVEs from an SBOM and
+                        check KEV (offline-capable)
+    active              AUTHORIZED-USE-ONLY: read LIVE Secure Boot state from
+                        the local host
+
+options:
+  -h, --help            show this help message and exit
+  --version             show program's version number and exit
+
+examples:
+  uefiscan scan firmware.bin
+  uefiscan scan firmware.bin --format json | jq .verdict
+  uefiscan scan dump.rom && echo SAFE || echo PROBLEM
+```
+
+```console
+$ uefiscan-emit feeds
+usage: uefiscan feeds [-h] {list,update,get} ...
+
+Edge/air-gap data-feed layer. Ingests the CISA Known Exploited Vulnerabilities
+(KEV) catalog over HTTPS, caches it to disk, and re-serves it offline. Use it
+to flag which firmware/platform CVEs are being actively exploited and carry a
+federal patch deadline.
+
+positional arguments:
+  {list,update,get}
+    list             list the feed(s) this tool consumes and cache freshness
+    update           fetch + cache the KEV catalog (online)
+    get              cross-reference CVEs against KEV (or dump the catalog)
+
+options:
+  -h, --help         show this help message and exit
+```
+
+> Blocks above are real `uefiscan` output — reproduce them from a clone.
+
+<!-- cognis:example:end -->
+
 ## Usage — step by step
 
 1. **Install** (Python 3.9+):

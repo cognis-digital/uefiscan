@@ -1,0 +1,17 @@
+$ uefiscan-emit feeds
+
+usage: uefiscan feeds [-h] {list,update,get} ...
+
+Edge/air-gap data-feed layer. Ingests the CISA Known Exploited Vulnerabilities
+(KEV) catalog over HTTPS, caches it to disk, and re-serves it offline. Use it
+to flag which firmware/platform CVEs are being actively exploited and carry a
+federal patch deadline.
+
+positional arguments:
+  {list,update,get}
+    list             list the feed(s) this tool consumes and cache freshness
+    update           fetch + cache the KEV catalog (online)
+    get              cross-reference CVEs against KEV (or dump the catalog)
+
+options:
+  -h, --help         show this help message and exit

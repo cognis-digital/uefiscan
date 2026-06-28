@@ -1,0 +1,3 @@
+$ uefiscan-emit --version
+
+uefiscan 0.1.0
